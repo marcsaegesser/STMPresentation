@@ -9,7 +9,7 @@ import ExecutionContext.Implicits.global
 object Main {
   def main(args: Array[String]) = {
     val numMessages = 10000L
-    val repeatCount = 1000
+    val repeatCount = 100
     val numClients = 30
     val numTests = 10
     val dropCount = 2
@@ -17,6 +17,7 @@ object Main {
     val routerSTM = new STMRouter()
     val resultsSTM = runTestSeries(routerSTM, numMessages, repeatCount, numClients, numTests, dropCount)
     println(s"STM:  Average msgs/msec=${resultsSTM.throughput}")
+    println(s"STM:  Rollback Count=${routerSTM.rollbackCount}")
 
     val routerTMap = new TMapRouter()
     val resultsTMap = runTestSeries(routerTMap, numMessages, repeatCount, numClients, numTests, dropCount)
@@ -25,6 +26,10 @@ object Main {
     val routerSync = new SyncRouter()
     val resultsSync = runTestSeries(routerSync, numMessages, repeatCount, numClients, numTests, dropCount)
     println(s"Sync: Average msgs/msec=${resultsSync.throughput}")
+
+    val routerBad = new BadRouter()
+    val resultsBad = runTestSeries(routerBad, numMessages, repeatCount, numClients, numTests, dropCount)
+    println(s"Bad: Average msgs/msec=${resultsBad.throughput}")
   }
 
   def elapsed[T](block: => T): (Long, T) = {

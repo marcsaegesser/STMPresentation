@@ -1,10 +1,13 @@
 package stmdemo
 
+import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.stm._
+import scala.concurrent.stm.Txn._
 
 class STMRouter extends Router {
   private val clients = Ref(Map.empty[ClientId, Client])
   private val connections = Ref(Map.empty[Connection, Set[Client]])
+  private val rollbacks = new AtomicInteger(0)
 
   def route(message: Message) = {
     getClient(message.dest) match {
@@ -17,12 +20,14 @@ class STMRouter extends Router {
 
   def addClient(client: Client): Unit =
     atomic { implicit txn =>
+      Txn.afterRollback(rollbackHandler)
       connections transform (_ addBinding (client.connection, client))
       clients transform (_ updated (client.id, client))
     }
 
   def removeClient(client: Client): Unit =
     atomic { implicit txn =>
+      Txn.afterRollback(rollbackHandler)
       connections transform (_ removeBinding (client.connection, client))
       clients transform (_ - client.id)
     }
@@ -35,8 +40,12 @@ class STMRouter extends Router {
 
   def removeConnection(connection: Connection): Set[Client] =
     atomic { implicit txn =>
+      Txn.afterRollback(rollbackHandler)
       val cs = getClients(connection)
       cs foreach { c => removeClient(c) }
       cs
     }
+
+  def rollbackHandler(status: Status) = rollbacks.incrementAndGet
+  def rollbackCount = rollbacks.get
 }

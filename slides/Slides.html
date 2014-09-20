@@ -612,13 +612,26 @@ in a slightly more efficient way
 ##Scala STM
 ]
 .right-column[
+#Best practices
+- Keep `atomic` blocks small
+]
+???
+- A variable is a sequence of values over time (Rich Hickey?)
+---
+.left-column[
+##Scala STM
+]
+.right-column[
 ##Things to keep in mind
-- Some code paths to execute multiple times
-  - Avoid I/O in `atomic` blocks
+- Use immutable values inside `Ref`s
+  - If you must use mutable data then only hand out immutable snapshots
+  - Never expose mutable data outside of an `atomic` block
+- Some code paths may execute multiple times
+  - Avoid non-repeatable code (e.g. I/O) in `atomic` blocks
   - Keep `atomic` blocks as small as possible
   - Handlers can be installed on the transaction to deal with non-repeatable code
 - Ordering of `atomic` operations is non-deterministic
-  - Atomicity insures that result of concurrent atomic operations is the same as if the
+  - Consistency insures that result of concurrent atomic operations is the same as if the
     operations ran sequentially
   - The results of a sequence of operations may differ depending on their order
   - STM guarantees that the final result is one of the valid results but not which one

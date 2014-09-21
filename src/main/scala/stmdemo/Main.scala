@@ -27,9 +27,9 @@ object Main {
     val resultsSync = runTestSeries(routerSync, numMessages, repeatCount, numClients, numTests, dropCount)
     println(s"Sync: Average msgs/msec=${resultsSync.throughput}")
 
-    val routerBad = new BadRouter()
-    val resultsBad = runTestSeries(routerBad, numMessages, repeatCount, numClients, numTests, dropCount)
-    println(s"Bad: Average msgs/msec=${resultsBad.throughput}")
+    // val routerBad = new BadRouter()
+    // val resultsBad = runTestSeries(routerBad, numMessages, repeatCount, numClients, numTests, dropCount)
+    // println(s"Bad: Average msgs/msec=${resultsBad.throughput}")
   }
 
   def elapsed[T](block: => T): (Long, T) = {

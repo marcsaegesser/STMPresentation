@@ -5,7 +5,7 @@
     <meta http-equiv="content-type" content="text/html; charset=utf-8" />
     <meta name="keywords" content="remark,remarkjs,markdown,slideshow,presentation" />
     <meta name="description" content="A simple, in-browser, markdown-driven slideshow tool." />
-    <title>Scala Landscape</title>
+    <title>Software Transactional Memory in Scala</title>
     <style type="text/css">
       @import url(http://fonts.googleapis.com/css?family=Droid+Serif);
       @import url(http://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
@@ -136,11 +136,12 @@ layout: false
 class: left, middle
 
 .left-column[
-# Agenda
+##Transactional Memory
+###Agenda
 ]
 .right-column[
 ##A different approach to concurrency
-- The problem
+- Problem description
 - Conventional solutions
 - Transactional memory
 - The Scala STM library
@@ -149,7 +150,7 @@ class: left, middle
 ---
 layout: false
 .left-column[
-# The problem
+##The Problem
 ]
 .right-column[
 ##Share mutable state across multiple concurrent threads of execution
@@ -177,7 +178,7 @@ Image and quote from _The Rock_, 1996, with Nicolas Cage and Sean Connery.
 
 ---
 .left-column[
-# The problem
+## The Problem
 ]
 .right-column[
 ##This problem is difficult...
@@ -189,12 +190,20 @@ Image and quote from _The Rock_, 1996, with Nicolas Cage and Sean Connery.
 
 ##How to solve a difficult problem?
 ##Avoid it!
-- If possible, consider different solutions that don't share mutable state
-- Maybe you really don't need to share the state
+- Look for solutions that don't share mutable state
 - Actors can help tame concurrency
-- Sequence operations on shared data
+- Sequence operations on shared data (e.g. single thread executor)
 ]
-
+???
+- To "reason about code" is to be able to look the code and apply thought and logic to come
+to an understanding of what the code does and how it behaves
+  - It is difficult to reason about concurrency because in addition to the code itself
+    we have to consider time and simmultenaity
+- Difficult to debug because breakpoints effect timing and concurrency
+- Difficult to test because behavior is conditional on timing
+- While it is hard, it is *possible* to implement this correctly
+- It is harder to keep concurrent code correct then it is to get it right the first time
+  - Easy for subsequent maintainers to forget to account for concurrency
 ---
 .comment[
 .left-column[
@@ -222,6 +231,7 @@ How concurrent code is _originally_ written can have a huge impact on how it is 
 ]
 .left-column[
 ##Conventional Solutions
+###Synchronization
 ]
 .right-column[
 - Identify _critical sections_ - blocks of code that manipulate shared state
@@ -232,47 +242,71 @@ shared resource (e.g. monitor, mutex).
 - A thread holds this exclusive access for the duration of the critical section
 and other threads that attempt to acquire the resource block until it is released.
 
-  - Reader/Writer locks can provide an optimization if most access is read only.
-  - Allows unlimited simultaneous readers but closes the door when a write needs access.
+- In Scala `synchronized` acquires and releases the monitor
 
 - Concerns
-  - Anything other than trivial Difficult
-  - Deadlocks - Mixing mutual exclusion and blocking
-  - Priority inversion - Mixing mutual exclusion, blocking and thread priorities
+  - Hard to get right
+  - Deadlocks
+  - Priority inversion
 ]
 ???
-What's not on the list of concerns? Performance.
+- Mention that Reader/Writer locks can be used to improve performance on read-dominated code
+- Mixing mutexes and blocking leads to the potential for deadlocks.
+- Mixing mutexes, blocking and thread priorities leads to the potential for priority inversion
+  - Recall the Mars Pathfinder mission
 
-Acquiring a monitor has no significant impact on performance.
-
-Don't ever not acquire a monitor because you thinks it's _slow_.
+- What's not on the list of concerns? Performance.
+  - Acquiring a monitor has no significant impact on performance.
+  - Don't ever not acquire a monitor because you thinks it's _slow_.
 ---
 .left-column[
-##A Different Approach
-### Software Transactional Memory
+##Software Transactional Memory
+###A Different Approach to Concurrency
 ]
 .right-column[
-##Software Transactional Memory
+##STM Features
 - _ACID_ transaction properties for memory operations
   - Atomic, Consistent, Isolated, ~~Durable~~
-  - Critical sections execute in a _transaction_
+  - Shared state is accessed within a _transaction_
   - Transactions can be commited, retried or rolled back
 - _Optimistic_ execution strategy
-  - Let threads execute critical sections concurrently
+  - Let threads access shared state concurrently
   - Detect illegal overlapping operations and retry
 
 ## STM in Scala
 - Implemented as a library (.jar)
 - Plain Scala code, no bytecode manipulation
 - No external dependencies
-- In the scala.concurrent.stm._ package
+- Resides in scala.concurrent.stm package
 - Provides and API, SPI and a reference implementation
 ]
 ???
+- Consider the problem we're trying to solve. It's very reminiscent of
+transactional access in relational databases. Maybe applying transactional
+techniques to memory is a better solution to concurrency?
+
+- The _Software_ in STM just means that we aren't using any hardware support.
+
+- There are two main features of STM
+  - Transactions
+  - Optimistic concurrency
+
+- ACID
+  - Atomic -- All or nothing.
+  - Consistent -- Sequence of valid states
+  - Isolated -- Concurrent execution same as sequential execution
+  - Durable -- Commits stay committed. Not relevant to STM
+
+- Optimistic execution
+  - Viable strategy because actual illegal concurrent access is quite rare.
+  - Contrast with _pessimistic_ (mutual exclusion) concurrency
+  - Sounds like magic but it isn't
+
 - Scala STM _may_ end up in the Standard library
 ---
 .left-column[
 ##Scala STM
+###Some code
 ]
 .right-column[
 ```scala
@@ -297,10 +331,15 @@ def remove(id: Int): Int =
 ```
 - Transactional memory is wrapped inside `Ref`s
 - `Ref`s can only be accessed inside `atomic` blocks
-- `atomic` blocks supply a transaction to be used by the `Ref`s
+- `atomic` supplies a transaction to be used by the `Ref`s
 - Access the contents of a `Ref` (read/write) with `()`
+- `atomic` blocks can be nested
 ]
 ???
+- This example shows conccurent access to two pieces of data, a Map
+and an integer. The integer keeps track of many operations have been made on the map.
+  - `count` and `data` need to be kept in sync.
+  - Provide concurrent modification for both adds and deletes
 - Only `Ref`s are transactional
   - Not trying to make all memory transactional
   - `Ref` explicitly labels shared state
@@ -308,10 +347,10 @@ def remove(id: Int): Int =
 - The contents of `count` and `data` are also immutable
   - This is a 'best practice'
 - `Ref`s _contain_ mutable data
-  - a `Ref` is a place to keep mutable values
+  - a `Ref` is a place to keep values that change over time
   - in this case _mutable_ values means that the contents of the `Ref` get
     replaced with new immutable values. It contains a _sequence_ of values over time.
-  - together with transactions they provide safe concurrent access
+  - together with transactions `Ref`s provide safe concurrent access to shared state
 - Hand wave about the syntax at this point. Details coming on a later slide.
 - Leverage type system (say what you mean)
   - Shared state is explicity marked as `Ref`s
@@ -320,6 +359,7 @@ def remove(id: Int): Int =
 ---
 .left-column[
 ##Scala STM
+###Transactions
 ]
 .right-column[
 ```scala
@@ -350,12 +390,18 @@ def remove(id: Int): Int =
   - automatically rolls back if an exception is thrown
 ]
 ???
-- At this point just say that STM _can_ detect collisions and do the right thing
+- Stress that `atomic` is not the same thing as `synchronized`
+- Discuss transactions in more depth
+  - Attempts to concurrently write the same `Ref` are serialized to prevent corruption
+  - At this point just say that STM _can_ detect collisions
+  - Any time a transaction detects a collision it retries by starting over at the
+    top of the `atomic` block with the new current values.
 - There's a better way to do `count() = count() + 1` but this makes the read/write operations clearer right now
 - Still hand waving about how this works
 ---
 .left-column[
 ##Scala STM
+###Syntax explained
 ]
 .right-column[
 ```scala
@@ -378,29 +424,46 @@ def remove(id: Int): Int =
     count()
   }
 ```
-- { implict txn => ... } is a function literal
-  - takes a single argument (an implicit transaction) and returns some value
+- `Ref(0)` is `Ref.apply(0)`
+- { implict txn => ... } is function literal with implicit arg
 - `atomic` is a function defined in `stm` package object
-  - Takes a function from transaction => Z
+  - Takes a function from InTxn => Z
   - Provides a transaction and invokes the given function
 - What's with all those parens?
   - on the rhs `apply()` - reads the value from the `Ref`
   - on the lhs `update()` - writes a new value to the `Ref`
 ]
 ???
-- Describe the functional syntax being used here.
-  - { implict txn => ... } is a function literal taking a single argument (an implicit transaction)
-  - `atomic` is a function, defined in `stm`, that takes a function from transaction => A
+- Talk about the syntax
+  - Understanding some of the details here will making it easier to follow how STM works
+  - This is a *very* common pattern so it is good understand what's going on
+- Point out that the `Ref(...)`s are `apply` on the `Ref` companion object. Differentiate these
+  from `Ref.apply()` on the `Ref` class.
+  - Talk about how classes, traits and companion objects show up in Scaladoc
+- Review a little bit about `implicit`
+  - An implicit parameter can be supplied by the caller normally
+  - If the caller doesn't supply it then the compiler will search the implicit context for a suitable value
+- { implict txn => ... } is a function literal taking a single argument (an implicit transaction)
+- `atomic` is a function, defined in `stm`, that takes a function from InTxn => Z
   - `atomic` creates a transaction and passes it to the provided function
+  - `stm` is a _package object_
+  - Importing `stm._` makes it available without the need for `stm.atomic`
+- Point out that txn is an argument name with no type
+  - The type inferencer can figure out what type it really has
+  - Because it's passed to `atomic` which expects an InTx => Z then type type of txn can be inferred
+  - You can use any name for the implicit arg but txn is a good nemonic
+- Note the actual transaction is hidden behind the InTxn value but you can simply think of InTxn as
+  representing the transaction
 - The parens are syntactic sugar for
   - `apply()` on the rhs
   - `update()` on the lhs
 - Most Scala developers will be familiar with `apply` but `update` maybe new
-  - Point out that the mutable `HashMap` usage uses `update`
-  - .e.g m(1) = "One"
+  - Point out that the `Array` uses `update`
+  - .e.g a(1) = "One"
 ---
 .left-column[
 ##Scala STM
+###Sugar-free
 ]
 .right-column[
 ```scala
@@ -431,30 +494,38 @@ The sugar-free version of the same code
 ---
 .left-column[
 ##Scala STM
+###Under the covers
 ]
 .right-column[
-How does it work?
+How does it work? It's all about transactions.
 
-- `apply` and `update` take a transaction as an implicit argument
+- `apply` and `update` take an `InTxn` as an implicit argument
+  - `Ref.apply()(implicit txn: InTxn): A = ...`
 
 - The transaction tracks `Ref`s that have been read so far
   - This is the transaction's _read set_
-  - The results of the transaction depends only on the read set
+  - The results of the transaction only depends on the read set
 
-- If another transaction writes to a `Ref` in the current read set
+- If another transaction writes to a `Ref` in this transaction's read set
 then the transaction has stale state and is rolled back and restarted from the beginning
 
 - Transaction rollback can only happen during an `apply`, `update` or other transaction
 method
 ]
 ???
-- It isn't necessarily obvious but the result of the computation depend only
-on the read set
+- The implicit txn value gets passed to transactional functions (e.g. `apply`) automatically
+- The functions are curried
+  - You supply the first (empty) parameter set, e.g. `count() = 1`
+   - Scala automatically supplies the implicit values for the second parameter set
+- It isn't necessarily obvious but the result of the computation depend only on the read set
 ---
 .left-column[
 ##Scala STM
+###Under the covers
 ]
 .right-column[
+- This is only a _schematic_ of of what's really going. Don't take this too literally.
+- `t?` represent local variables on the stack.
 ```scala
 val data = Ref(Map(1 -> "One", 2 -> "Two", 3 -> "Three")
 val count = Ref(4)
@@ -500,6 +571,9 @@ atomic
 ]
 ???
 - This is only a schematic of what's really going on under the covers
+- `t?` represent local stack values
+- The code on the left updates the value in `data` before the code on the right.
+  - When the code on the right attempts to update `data` it detects the stale state of `data`.
 - There's no magic, just accurate and efficient bookeeping
 - Don't get too bogged down in the details
 ---
@@ -543,23 +617,26 @@ in a slightly more efficient way
 ---
 .left-column[
 ##Scala STM
+###Transformations
 ]
 .right-column[
 ```scala
-  private val count = Ref(0)  // count: Ref[Int]
-  private val data = Ref(Map.empty[Int, String])
+import scala.concurrent.stm._
 
-  def add(id: Int, name: String): Int =
-    atomic { implicit txn =>
-      data transform (_ updated (id, name))
-      count transformAndGet (_ + 1)
-    }
+private val count = Ref(0)  // count: Ref[Int]
+private val data = Ref(Map.empty[Int, String])
 
-  def remove(id: Int): Int =
-    atomic { implicit txn =>
-      data transform (_ - id)
-      count transformAndGet (_ + 1)
-    }
+def add(id: Int, name: String): Int =
+  atomic { implicit txn =>
+    data transform (_ updated (id, name))
+    count transformAndGet (_ + 1)
+  }
+
+def remove(id: Int): Int =
+  atomic { implicit txn =>
+    data transform (_ - id)
+    count transformAndGet (_ + 1)
+  }
 ```
 - A cleaner implementation
   - `Ref.transform` performs an atomic transformation of the `Ref`s value
@@ -570,10 +647,13 @@ in a slightly more efficient way
 - `transform` instead of `map`?
   - Probably to stress that it changes the `Ref`
   - `map` leaves the existing data unchanged and returns a new instance
+  - `transform` actually _changes_ whats stored in the `Ref`
 - This code accomplishes the same thing as before but is a little cleaner
+- Point out use of `_` for default argument
 ---
 .left-column[
 ##Scala STM
+###Views
 ]
 .right-column[
 ```scala
@@ -601,43 +681,32 @@ in a slightly more efficient way
 - `Ref.single` creates a `View`
   - A convience for single statement operations
   - Can be used outside of a transaction
-  - atomic { implicit t => count() } ==> count.single()
-  - atomic { implicit t => count() = 5 } ==> count.single() = 5
+  - `atomic { implicit t => count() }` &lt;=> `count.single()`
+  - `atomic { implicit t => count() = 5 }` &lt;=> `count.single() = 5`
 ]
 ???
 - `View` has most of the atomic operations as `Ref`
+  - `apply`, `update`
   - `transform`, `transformAndGet`, ...
 ---
 .left-column[
 ##Scala STM
+###Things to keep in mind
 ]
 .right-column[
-#Best practices
-- Keep `atomic` blocks small
-]
-???
-- A variable is a sequence of values over time (Rich Hickey?)
----
-.left-column[
-##Scala STM
-]
-.right-column[
-##Things to keep in mind
 - Use immutable values inside `Ref`s
   - If you must use mutable data then only hand out immutable snapshots
   - Never expose mutable data outside of an `atomic` block
+
 - Some code paths may execute multiple times
   - Avoid non-repeatable code (e.g. I/O) in `atomic` blocks
-  - Keep `atomic` blocks as small as possible
   - Handlers can be installed on the transaction to deal with non-repeatable code
+
 - Ordering of `atomic` operations is non-deterministic
-  - Consistency insures that result of concurrent atomic operations is the same as if the
+  - Isolation insures that result of concurrent atomic operations is the same as if the
     operations ran sequentially
   - The results of a sequence of operations may differ depending on their order
   - STM guarantees that the final result is one of the valid results but not which one
-- Performance
-  - STM is cheap but not free
-  - Benchmark or profile for your use cases
 ]
 ???
 - Use the banking example from SICP to discuss non-determinism
@@ -649,6 +718,35 @@ in a slightly more efficient way
 ---
 .left-column[
 ##Scala STM
+###Risks
+]
+.right-column[
+###Correctness
+  - STM is essentially a black box (it is open source)
+  - It is complicated
+  - Well tested and appears to be in good shape
+
+###Performance
+  - STM is cheap but not free
+  - Best results when reads are dominant
+    - Reads never cause rollbacks
+    - Reads can run concurrently
+  - Overall performance assumes rollbacks are rare
+    - This is generally the case
+    - If atomic blocks are small the likelihood of collisions is small
+  - Benchmark and profile for your use cases
+]
+???
+- Project on Github isn't very active
+  - It's finished and really doesn't need anything else
+  - Still making bug fixes when necessary
+  - Makes builds for new Scala versions
+- Show the commit message from the recent deadlock fix
+- Demo will show some performance values
+---
+.left-column[
+##Scala STM
+###Blocking
 ]
 .right-column[
 ```scala
@@ -674,13 +772,22 @@ in a slightly more efficient way
     }
   }
 ```
-- `retry` causes `atomic` to rewinde and block
+- Sometimes you really do want to block
+- `retry` causes `atomic` to rewind and block
   - Use `retry` to indicate that you can't proceed with the current state
   - `atomic` will block and automatically restart when anything in the current read set changes
   - Use `retryFor` to supply a timeout
 ]
 ???
+- `retry` will block forever unless something actually changes.
 - The timeout in `retryFor` is cumlative.
+---
+.left-column[
+##Scala STM
+###TMap & TSet
+]
+.right-column[
+]
 ---
 .left-column[
 ##Scala STM
@@ -711,6 +818,7 @@ def meal(left: Fork, right: Fork) {
 ]
 ???
 - This example comes from the Scala STM documentation
+- This is only part of the solution but it's the interesting part.
 - Note that what values are waited on depends on how far we get before detecting an in-use fork
 ---
     </textarea>

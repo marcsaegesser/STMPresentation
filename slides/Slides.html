@@ -698,6 +698,45 @@ def remove(id: Int): Int =
 ---
 .left-column[
 ##Scala STM
+###Views
+]
+.right-column[
+```scala
+  private val count = Ref(0)  // count: Ref[Int]
+  private val data = Ref(Map.empty[Int, String])
+
+  def add(id: Int, name: String): Int =
+    atomic { implicit txn =>
+      data transform (_ updated (id, name))
+      count transformAndGet (_ + 1)
+    }
+
+  def remove(id: Int): Int =
+    atomic { implicit txn =>
+      data transform (_ - id)
+      count transformAndGet (_ + 1)
+    }
+
+  private val countView = count.single
+  def currentCount = countView()
+
+  private val dataView = data.single
+  def currentData = dataView()
+```
+- `View` uses a light-weight transaction
+  - Less expensive when used outside of a transaction
+- A `View` can be used within a normal transaction
+  - Participates like any other `Ref`
+  - Changes only become visible when the transaction is commited
+  - Rolls back
+]
+???
+- `View` _sort of_ creates a light-weight transaction
+  - Only when used outside of a real transaction
+  - When used within a real transaction it behaves just like a `Ref`
+---
+.left-column[
+##Scala STM
 ###Things to keep in mind
 ]
 .right-column[

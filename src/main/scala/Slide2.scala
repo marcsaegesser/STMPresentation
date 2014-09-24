@@ -33,8 +33,8 @@ object Slide2 {
   def getOrWait(x: Int, timeout: Long): Option[String] = {
     atomic { implicit txn =>
       data() get x match {
-        case Some(s) => Some(s)
-        case None => retryFor(timeout); None
+        case s @ Some(_) => s
+        case None        => retryFor(timeout); None
       }
     }
   }

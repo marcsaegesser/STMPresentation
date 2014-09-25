@@ -737,6 +737,36 @@ def remove(id: Int): Int =
 ---
 .left-column[
 ##Scala STM
+###A Brief Interlude
+]
+.right-column[
+##So, what do we have so far?
+
+- Shared mutable state is _explicitly marked_
+- _No blocking_ so deadlocks and priority inversions are impossible
+- Leverage the Scala type system to ensure shared state is only accessed within transactions
+- Use Scala language features to simplify code
+- Atomicity, consistency and isolation make it easier to reason about code
+
+##All of this makes it _easier_ to write concurrent code and to keep it correct over time.
+
+
+]
+???
+- Now that the basics of STM have been covered take a minute to reflect on what
+  benefits it brings to the table with respect to conventional concurrency solutions
+  - Shared state is explicitly labeled (i.e. `Ref` and `View`)
+  - No blocking so deadlocks and priority inversions cannot happen
+  - Leverage the Scala type system to prevent accessing shared state outside of transactions
+  - Automatic rollback/restart make it easier to reason about code
+- All of this helps get concurrent implementations correct and to keep them correct
+- Say what you mean style of programming
+- Stress that _easier_ does not mean _easy_
+  - You still must determine what constitutes shared state
+  - You must ensure that everything that belongs in a transaction really is in one
+---
+.left-column[
+##Scala STM
 ###Things to keep in mind
 ]
 .right-column[
@@ -761,6 +791,136 @@ def remove(id: Int): Int =
   - Paul withdraw half of the current balance
   - Depending on order the account balance may be $90 or $70
   - Either is valid and the system in consistent because the total money is consserved
+---
+.left-column[
+##Scala STM
+###Blocking
+]
+.right-column[
+```scala
+  private val count = Ref(0)  // count: Ref[Int]
+  private val data = Ref(Map.empty[Int, String])
+
+  def add(id: Int, name: String): Int = ...
+
+  def remove(id: Int): Int = ...
+
+  def getOrWait(x: Int): String = {
+    atomic { implicit txn =>
+      data() get x getOrElse retry
+    }
+  }
+
+  def getOrWait(x: Int, timeout: Long): Option[String] = {
+    atomic { implicit txn =>
+      data() get x match {
+        case s @ Some(_) => s
+        case None        => retryFor(timeout); None
+      }
+    }
+  }
+```
+- `retry` causes `atomic` to rewind and block
+  - `atomic` will block and automatically restart when anything in the current read set changes
+  - `atomic.withRetryTimeout` will throw `InterruptedException` after timeout
+- `retryFor` is like `retry` but
+  - Takes a timeout
+  - _Returns_ after timeout expires
+]
+???
+- Sometimes you really do want to block
+- Use `retry` to indicate that you can't proceed with the current state
+  even though the reads and writes have been consistent
+- Point out difference between automatic rollback and retry
+  - Rollback immediately resumes the computation from the start
+  - retry blocks the thread until something pertinate changes
+- `retry` will block forever unless something actually changes or 
+  - Use `atomic.withRetryTimeout` to supply a timeout
+  - Will throw if `InterruptedException` if the timeout expires
+  - retry _never_ returns
+- `retryFor` takes a timeout and _returns_ when the timeout expires
+- The timeouts are cumlative.
+- Discuss use of alias in `case s @ Some(_)`
+---
+.left-column[
+##Scala STM
+###Blocking
+]
+.right-column[
+```scala
+class Fork { val inUse = Ref(false) }
+
+def meal(left: Fork, right: Fork) {
+  // thinking
+  atomic { implicit txn =>
+    if (left.inUse() || right.inUse())
+      retry // forks are not both ready, wait
+    left.inUse() = true
+    right.inUse() = true
+  }
+  // eating
+  atomic { implicit txn =>
+    left.inUse() = false
+    right.inUse() = false
+  }
+}
+```
+- Dining Philolsphers problem
+  - Forks are shared between two philosphers
+  - A philosopher needs to pick up both forks in order to eat
+  - If either fork is in use then block until the state changes
+]
+???
+- A 'real world' example of a blocking algorithm
+- This example comes from the Scala STM documentation
+- This is only part of the solution but it's the interesting part.
+- Note that what values are waited on depends on how far we get before detecting an in-use fork
+- Blocking is an integral part of this problem
+  - This fine for a small number of threads
+  - This doesn't scale well to highly concurrent servers
+---
+.left-column[
+##Scala STM
+###Alternatives
+]
+.right-column[
+```scala
+val msg =
+  atomic { implicit txn =>
+    if (x() == 0) retry
+    x -= 1
+    "took one from x"
+  } orAtomic { implicit txn =>
+    if (y() == 0) retry
+    y -= 1
+    "took one from y"
+  } orAtomic { implicit txn =>
+    if (z() == 0) retry
+    z -= 1
+    "took one from z"
+  }```
+- A subsequent `orAtomic` block is executed if `retry` is called
+- The final `orAtomic` block above will block until `z` becomes non-zero
+]
+???
+- This example also comes directly from the Scala STM documentation
+
+---
+.left-column[
+##Scala STM
+###TMap & TSet
+]
+.right-column[
+-`TMap` and `TSet` provide _mutable_ containers optimized for use within transactions.
+- All of their methods require an implicit `InTxn` value
+  - They must be used within an `atomic` block
+  - They aren't used inside `Ref`s
+- They are composed internally of mutable hash tries of `Ref`s
+  - This provides finer grained control of the read set
+  - Multiple transactions may be reading/writing different parts of the internal data structures
+    without interference
+]
+???
 ---
 .left-column[
 ##Scala STM
@@ -792,88 +952,13 @@ def remove(id: Int): Int =
 ---
 .left-column[
 ##Scala STM
-###Blocking
+###Conclussion
 ]
 .right-column[
-```scala
-  private val count = Ref(0)  // count: Ref[Int]
-  private val data = Ref(Map.empty[Int, String])
-
-  def add(id: Int, name: String): Int = ...
-
-  def remove(id: Int): Int = ...
-
-  def getOrWait(x: Int): String = {
-    atomic { implicit txn =>
-      data() get x getOrElse retry
-    }
-  }
-
-  def getOrWait(x: Int, timeout: Long): Option[String] = {
-    atomic { implicit txn =>
-      data() get x match {
-        case s @ Some(_) => s
-        case None        => retryFor(timeout); None
-      }
-    }
-  }
-```
-- Sometimes you really do want to block
-- `retry` causes `atomic` to rewind and block
-  - Use `retry` to indicate that you can't proceed with the current state
-  - `atomic` will block and automatically restart when anything in the current read set changes
-  - Use `retryFor` to supply a timeout
 ]
-???
-- `retry` will block forever unless something actually changes.
-- The timeout in `retryFor` is cumlative.
 ---
-.left-column[
-##Scala STM
-###TMap & TSet
-.right-column[
--`TMap` and `TSet` provide _mutable_ containers optimized for use within transactions.
-- All of their methods require an implicit `InTxn` value
-  - They must be used within an `atomic` block
-  - They aren't used inside `Ref`s
-- They are composed internally of mutable hash tries of `Ref`s
-  - This provides finer grained control of the read set
-  - Multiple transactions may be reading/writing different parts of the internal data structures
-    without interference
-]
-???
----
-.left-column[
-##Scala STM
-]
-.right-column[
-```scala
-class Fork { val inUse = Ref(false) }
-
-def meal(left: Fork, right: Fork) {
-  // thinking
-  atomic { implicit txn =>
-    if (left.inUse() || right.inUse())
-      retry // forks are not both ready, wait
-    left.inUse() = true
-    right.inUse() = true
-  }
-  // eating
-  atomic { implicit txn =>
-    left.inUse() = false
-    right.inUse() = false
-  }
-}
-```
-- Dining Philolsphers problem
-  - Forks are shared between two philosphers
-  - A philosopher needs to pick up both forks in order to eat
-  - If either fork is in use then block until the state changes
-]
-???
-- This example comes from the Scala STM documentation
-- This is only part of the solution but it's the interesting part.
-- Note that what values are waited on depends on how far we get before detecting an in-use fork
+class: center, middle
+#Code Examples
 ---
     </textarea>
     <script src="http://gnab.github.com/remark/downloads/remark-0.6.5.min.js" type="text/javascript"></script>

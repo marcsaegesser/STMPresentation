@@ -9,8 +9,8 @@ import ExecutionContext.Implicits.global
 object Main {
   def main(args: Array[String]) = {
     val numMessages = 10000L
-    val repeatCount = 100
-    val numClients = 30
+    val repeatCount = 1
+    val numClients = 30000
     val numTests = 10
     val dropCount = 2
 
@@ -26,10 +26,6 @@ object Main {
     val routerSync = new SyncRouter()
     val resultsSync = runTestSeries(routerSync, numMessages, repeatCount, numClients, numTests, dropCount)
     println(s"Sync: Average msgs/msec=${resultsSync.throughput}")
-
-    // val routerBad = new BadRouter()
-    // val resultsBad = runTestSeries(routerBad, numMessages, repeatCount, numClients, numTests, dropCount)
-    // println(s"Bad: Average msgs/msec=${resultsBad.throughput}")
   }
 
   def elapsed[T](block: => T): (Long, T) = {
@@ -87,8 +83,7 @@ class TestClient(val id: ClientId, val name: String, val connection: Connection,
   def start: Future[Int] = {
     val p = Promise[Int]()
 
-    val t = new Thread(new TestRunner(p))
-    t.start()
+    global.execute(new TestRunner(p))
 
     p.future
   }

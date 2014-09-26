@@ -32,7 +32,7 @@ import scala.concurrent._
 import scala.concurrent.stm._
 import ExecutionContext.Implicits.global"""
 
-fork in run := true
+// fork in run := true
 
 // javaOptions in run := Seq("-Dccstm.stats=true")
 

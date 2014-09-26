@@ -24,18 +24,16 @@ object Slide2 {
   private val dataView = data.single
   def currentData = dataView()
 
-  def getOrWait(x: Int): String = {
+  def getOrWait(x: Int): String =
     atomic { implicit txn =>
       data() get x getOrElse retry
     }
-  }
 
-  def getOrWait(x: Int, timeout: Long): Option[String] = {
+  def getOrWait(x: Int, timeout: Long): Option[String] =
     atomic { implicit txn =>
       data() get x match {
         case s @ Some(_) => s
         case None        => retryFor(timeout); None
       }
     }
-  }
 }

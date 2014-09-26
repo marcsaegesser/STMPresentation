@@ -145,15 +145,14 @@ class: left, middle
 - Conventional solutions
 - Transactional memory
 - The Scala STM library
-- Examples
+- Real code
 ]
 ???
-- This talk originated with my having already used Scala STM a little at work and
-  wanting to investigating 'going large' on a new project.
-- I needed to dig deeper into Scala STM and decided to share what I learned
-- The talk should be interesting to both Scala wizards who are new to STM and
-  also to those new to Scala as I plan to explain how Scala STM makes use of
-  powerful features of the language.
+- Introduction
+  - This talk originated with my having already used Scala STM a little at work and
+    wanting to investigating it deeper before making a larger use of it.
+  - This presentation summarizes what I've learned in my STM research.
+- Review agenda
 ---
 layout: false
 .left-column[
@@ -165,7 +164,7 @@ layout: false
 ## This is dangerous
 - Corruption
 - Inconsistency
-- Non-deterministic behavior (race conditions)
+- Non-deterministic behavior
 - Death
 
 "the second you don't respect this, it will kill you"
@@ -212,32 +211,8 @@ to an understanding of what the code does and how it behaves
 - It is harder to keep concurrent code correct then it is to get it right the first time
   - Easy for subsequent maintainers to forget to account for concurrency
 ---
-.comment[
 .left-column[
-##A digression
-###_and a small sermon_
-]
-.right-column[
-##On the topic keeping concurrent code correct...
-
-How concurrent code is _originally_ written can have a huge impact on how it is maintained.
-
-- Make it very clear what values are shared between threads and what locks are used to protect them
-
-- Minimize the size of your synchronized blocks as much possible -
-  only protect what _needs_ protecting
-
-- Document expected usage models
-  - How many threads are expected
-  - Are the threads from I/O, timer callbacks, event notifications
-  - Anything that will help a maintainer understand your original intentions
-
-]
-???
----
-]
-.left-column[
-##Conventional Solutions
+##Conventional Solution
 ###Synchronization
 ]
 .right-column[
@@ -252,7 +227,10 @@ and other threads that attempt to acquire the resource block until it is release
 - In Scala `synchronized` acquires and releases the monitor
 
 - Concerns
-  - Hard to get right
+  - Easy to forget to acquire a lock
+  - Easy to acquire the wrong lock
+  - Easy to forget to `notify` waiting threads
+  - Exceptions can cause inconsistent state
   - Deadlocks
   - Priority inversion
 ]
@@ -282,10 +260,11 @@ and other threads that attempt to acquire the resource block until it is release
 
 ## STM in Scala
 - Implemented as a library (.jar)
-- Plain Scala code, no bytecode manipulation
 - No external dependencies
+- Plain Scala code, no bytecode manipulation
 - Resides in scala.concurrent.stm package
 - Provides and API, SPI and a reference implementation
+- Java-friendly API included
 ]
 ???
 - Consider the problem we're trying to solve. It's very reminiscent of
@@ -310,6 +289,7 @@ techniques to memory is a better solution to concurrency?
   - Sounds like magic but it isn't
 
 - Scala STM _may_ end up in the Standard library
+- Scala STM is similar to STM implementations in Clojure and Haskell
 ---
 .left-column[
 ##Scala STM
@@ -664,26 +644,26 @@ def remove(id: Int): Int =
 ]
 .right-column[
 ```scala
-  private val count = Ref(0)  // count: Ref[Int]
-  private val data = Ref(Map.empty[Int, String])
+private val count = Ref(0)  // count: Ref[Int]
+private val data = Ref(Map.empty[Int, String])
 
-  def add(id: Int, name: String): Int =
-    atomic { implicit txn =>
-      data transform (_ updated (id, name))
-      count transformAndGet (_ + 1)
-    }
+def add(id: Int, name: String): Int =
+  atomic { implicit txn =>
+    data transform (_ updated (id, name))
+    count transformAndGet (_ + 1)
+  }
 
-  def remove(id: Int): Int =
-    atomic { implicit txn =>
-      data transform (_ - id)
-      count transformAndGet (_ + 1)
-    }
+def remove(id: Int): Int =
+  atomic { implicit txn =>
+    data transform (_ - id)
+    count transformAndGet (_ + 1)
+  }
 
-  private val countView = count.single
-  def currentCount = countView()
+private val countView = count.single
+def currentCount = countView()
 
-  private val dataView = data.single
-  def currentData = dataView()
+private val dataView = data.single
+def currentData = dataView()
 ```
 - `Ref.single` creates a `View`
   - A convience for single statement operations
@@ -702,26 +682,26 @@ def remove(id: Int): Int =
 ]
 .right-column[
 ```scala
-  private val count = Ref(0)  // count: Ref[Int]
-  private val data = Ref(Map.empty[Int, String])
+private val count = Ref(0)  // count: Ref[Int]
+private val data = Ref(Map.empty[Int, String])
 
-  def add(id: Int, name: String): Int =
-    atomic { implicit txn =>
-      data transform (_ updated (id, name))
-      count transformAndGet (_ + 1)
-    }
+def add(id: Int, name: String): Int =
+  atomic { implicit txn =>
+    data transform (_ updated (id, name))
+    count transformAndGet (_ + 1)
+  }
 
-  def remove(id: Int): Int =
-    atomic { implicit txn =>
-      data transform (_ - id)
-      count transformAndGet (_ + 1)
-    }
+def remove(id: Int): Int =
+  atomic { implicit txn =>
+    data transform (_ - id)
+    count transformAndGet (_ + 1)
+  }
 
-  private val countView = count.single
-  def currentCount = countView()
+private val countView = count.single
+def currentCount = countView()
 
-  private val dataView = data.single
-  def currentData = dataView()
+private val dataView = data.single
+def currentData = dataView()
 ```
 - `View` uses a light-weight transaction
   - Less expensive when used outside of a transaction
@@ -734,6 +714,10 @@ def remove(id: Int): Int =
 - `View` _sort of_ creates a light-weight transaction
   - Only when used outside of a real transaction
   - When used within a real transaction it behaves just like a `Ref`
+- In this example `count` and `data` could be `View`s and we could do away
+  with `countView` and `dataView`. The current approach may help you remember
+  that `count` and `data` need to be in transactions and modified atomically.
+  Or maybe not.
 ---
 .left-column[
 ##Scala STM
@@ -767,6 +751,7 @@ def remove(id: Int): Int =
 ---
 .left-column[
 ##Scala STM
+###A Brief Interlude
 ###Things to keep in mind
 ]
 .right-column[
@@ -798,25 +783,23 @@ def remove(id: Int): Int =
 ]
 .right-column[
 ```scala
-  private val count = Ref(0)  // count: Ref[Int]
-  private val data = Ref(Map.empty[Int, String])
+private val count = Ref(0)  // count: Ref[Int]
+private val data = Ref(Map.empty[Int, String])
 
-  def add(id: Int, name: String): Int = ...
+def add(id: Int, name: String): Int = ...
 
-  def remove(id: Int): Int = ...
+def remove(id: Int): Int = ...
 
-  def getOrWait(x: Int): String = {
-    atomic { implicit txn =>
-      data() get x getOrElse retry
-    }
+def getOrWait(x: Int): String =
+  atomic { implicit txn =>
+    data() get x getOrElse retry
   }
 
-  def getOrWait(x: Int, timeout: Long): Option[String] = {
-    atomic { implicit txn =>
-      data() get x match {
-        case s @ Some(_) => s
-        case None        => retryFor(timeout); None
-      }
+def getOrWait(x: Int, timeout: Long): Option[String] =
+  atomic { implicit txn =>
+    data() get x match {
+      case s @ Some(_) => s
+      case None        => retryFor(timeout); None
     }
   }
 ```
@@ -904,33 +887,104 @@ val msg =
 ]
 ???
 - This example also comes directly from the Scala STM documentation
-
 ---
 .left-column[
 ##Scala STM
 ###TMap & TSet
 ]
 .right-column[
--`TMap` and `TSet` provide _mutable_ containers optimized for use within transactions.
+```scala
+private val count = Ref(0).single  // count: Ref.View[Int]
+private val data = TMap.empty[Int, String].single
+
+def add(id: Int, name: String): Int =
+  atomic { implicit txn =>
+    data += (id -> name)
+    count transformAndGet (_ + 1)
+  }
+
+def remove(id: Int): Int =
+  atomic { implicit txn =>
+    data -= id
+    count transformAndGet (_ + 1)
+  }
+
+def currentCount = count()
+
+def currentData = data.snapshot
+```
+- `TMap` and `TSet` provide _mutable_ containers optimized for use within transactions.
 - All of their methods require an implicit `InTxn` value
-  - They must be used within an `atomic` block
-  - They aren't used inside `Ref`s
-- They are composed internally of mutable hash tries of `Ref`s
-  - This provides finer grained control of the read set
-  - Multiple transactions may be reading/writing different parts of the internal data structures
-    without interference
+- Using `View`s makes these an almost drop-in replacement for `SynchronizedMap` and `SynchronizedSet`
+- Iterators can be used outside of a transaction
+  - Provides a picture of the structure at the time the interator was created
 ]
 ???
 ---
 .left-column[
 ##Scala STM
+###TMap & TSet
+]
+.right-column[
+```scala
+private val count = Ref(0).single  // count: Ref.View[Int]
+private val data = TMap.empty[Int, String].single
+
+def add(id: Int, name: String): Int =
+  atomic { implicit txn =>
+    data += (id -> name)
+    count transformAndGet (_ + 1)
+  }
+
+def remove(id: Int): Int =
+  atomic { implicit txn =>
+    data -= id
+    count transformAndGet (_ + 1)
+  }
+
+def currentCount = count()
+
+def currentData = data.snapshot
+```
+- `snapshot` returns an immutable `Map` or `Set`
+- `clone` returns a new mutable `View`
+- `snapshot` and `clone` are O(1)
+- Composed internally of mutable hash tries of `Ref`s
+  - This provides finer grained control of the read set
+  - Multiple transactions may be reading/writing different parts of the internal data structures
+    without interference
+]
+???
+- Uses generation numbers and copy-on-write to efficiently 
+---
+.left-column[
+##Scala STM
+###Conclussion
+###Benefits
+]
+.right-column[
+###Simplifies concurrent programming
+  - Explicitly tags shared mutable state
+  - Reduces both code and complexity for concurrent problems
+  - Simplifies complex blocking without deadlock risks
+  - Easier to maintain and keep correct
+
+###Safety
+  - Leverage the type system to ensure correct use of shared state
+  - Automatically rollsback intermediate changes on exceptions
+  - Removes the possibility of deadlocks
+]
+---
+.left-column[
+##Scala STM
+###Conclusion
 ###Risks
 ]
 .right-column[
 ###Correctness
-  - STM is essentially a black box (it is open source)
-  - It is complicated
-  - Well tested and appears to be in good shape
+  - STM is essentially a black box
+  - Its internals are complicated
+  - Ongoing maintenance
 
 ###Performance
   - STM is cheap but not free
@@ -941,6 +995,10 @@ val msg =
     - This is generally the case
     - If atomic blocks are small the likelihood of collisions is small
   - Benchmark and profile for your use cases
+
+###Different
+  - Scala STM is not in widespread use
+  - May confuse maintainers when they first encounter it
 ]
 ???
 - Project on Github isn't very active
@@ -952,13 +1010,25 @@ val msg =
 ---
 .left-column[
 ##Scala STM
-###Conclussion
+###Links
 ]
 .right-column[
+- This talk
+  - [https://github.com/marcsaegesser/STMPresentation](https://github.com/marcsaegesser/STMPresentation)
+- Scala STM
+  - [https://nbronson.github.io/scala-stm/intro.html](https://nbronson.github.io/scala-stm/intro.html)
+  - [https://github.com/nbronson/scala-stm](https://github.com/nbronson/scala-stm)
+- Nathan Bronson - Author of Scala STM
+  - [http://purl.stanford.edu/gm457gs5369](http://purl.stanford.edu/gm457gs5369)
+- Mars Pathfinder priority inversion
+  - [http://research.microsoft.com/en-us/um/people/mbj/Mars_Pathfinder/Mars_Pathfinder.html](http://research.microsoft.com/en-us/um/people/mbj/Mars_Pathfinder/Mars_Pathfinder.html)
+- Rich Hickey - Clojure specific but very useful
+  - [http://clojure.org/state](http://clojure.org/state)
+  - [http://www.infoq.com/presentations/Value-Identity-State-Rich-Hickey](http://www.infoq.com/presentations/Value-Identity-State-Rich-Hickey)
 ]
 ---
 class: center, middle
-#Code Examples
+# Real Code!
 ---
     </textarea>
     <script src="http://gnab.github.com/remark/downloads/remark-0.6.5.min.js" type="text/javascript"></script>

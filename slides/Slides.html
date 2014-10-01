@@ -210,6 +210,9 @@ to an understanding of what the code does and how it behaves
 - While it is hard, it is *possible* to implement this correctly
 - It is harder to keep concurrent code correct then it is to get it right the first time
   - Easy for subsequent maintainers to forget to account for concurrency
+
+- OK, I've satisified my moral obligation to try to talk you out of doing this,
+  but you're going to do it anyway so here's how...
 ---
 .left-column[
 ##Conventional Solution
@@ -218,13 +221,11 @@ to an understanding of what the code does and how it behaves
 .right-column[
 - Identify _critical sections_ - blocks of code that manipulate shared state
 
-- To enter a criticial section a thread must acquire exclusvie access to a
-shared resource (e.g. monitor, mutex).
+- To enter a criticial section a thread must acquire a mutex
 
-- A thread holds this exclusive access for the duration of the critical section
-and other threads that attempt to acquire the resource block until it is released.
+- A thread holds this mutex for the duration of the critical section and other threads that attempt to acquire the mutex block until it is released.
 
-- In Scala `synchronized` acquires and releases the monitor
+- Intra-thread coordination with ```Object.wait``` and ```Object.notify```
 
 - Concerns
   - Easy to forget to acquire a lock
@@ -262,7 +263,6 @@ and other threads that attempt to acquire the resource block until it is release
 - Implemented as a library (.jar)
 - No external dependencies
 - Plain Scala code, no bytecode manipulation
-- Resides in scala.concurrent.stm package
 - Provides and API, SPI and a reference implementation
 - Java-friendly API included
 ]
@@ -270,8 +270,6 @@ and other threads that attempt to acquire the resource block until it is release
 - Consider the problem we're trying to solve. It's very reminiscent of
 transactional access in relational databases. Maybe applying transactional
 techniques to memory is a better solution to concurrency?
-
-- The _Software_ in STM just means that we aren't using any hardware support.
 
 - There are two main features of STM
   - Transactions
@@ -288,8 +286,8 @@ techniques to memory is a better solution to concurrency?
   - Contrast with _pessimistic_ (mutual exclusion) concurrency
   - Sounds like magic but it isn't
 
-- Scala STM _may_ end up in the Standard library
 - Scala STM is similar to STM implementations in Clojure and Haskell
+- Scala STM _may_ end up in the Standard library
 ---
 .left-column[
 ##Scala STM

@@ -6,9 +6,22 @@ import scala.concurrent.duration._
 
 import ExecutionContext.Implicits.global
 
+/** A simple test harness that runs the STM, TMap and synchronized
+  * implementations of the Router trait. It is designed to put the STM
+  * system under substantial load and cause *lots* of transaction
+  * rollbacks and retries. The goal was to understand how STM performs
+  * relative to conventional concurrency solutions in the face of lots
+  * of concurrent write operations.
+  *
+  * Each test consists of a number of simulated clients that add themselves to the router and
+  * then send some number of messages addressed to themselves. Each client counts the number
+  * of messages it recieves and verifies that all messages were delivered. Each test is executed
+  * numTests times and the first dropCount tests are not counted in the statistics. This allows the
+  * VM to 'warm up' before we start taking statistics.
+  */
 object Main {
   def main(args: Array[String]) = {
-    val numMessages = 10000L
+    val numMessages = 1000L
     val repeatCount = 1
     val numClients = 30000
     val numTests = 10

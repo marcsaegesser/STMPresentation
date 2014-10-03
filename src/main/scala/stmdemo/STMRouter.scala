@@ -4,6 +4,11 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.stm._
 import scala.concurrent.stm.Txn._
 
+/** This is an STM implementation of the Router trait. Clients and
+  * connections are tracked using immutable Maps inside Refs. The
+  * connection map is extended with my ImmutableMultiMapExtension to
+  * provide an immutable 1-many mapping of connections to clients.
+  */
 class STMRouter extends Router {
   private val clients = Ref(Map.empty[ClientId, Client])
   private val connections = Ref(Map.empty[Connection, Set[Client]])

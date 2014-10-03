@@ -1,5 +1,9 @@
 package stmdemo
 
+/** A bad implementation of the Router trait. This version provides
+  * no concurrency protection at all. It is intended only to demonstrate
+  * what happens when we ignore concurrency.
+  */
 class BadRouter extends Router {
   private var clients = Map.empty[ClientId, Client]
   private var connections = Map.empty[Connection, Set[Client]]

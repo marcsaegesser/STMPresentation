@@ -1,5 +1,11 @@
 package stmdemo
 
+/** An implementation of the Router trait using conventional lock
+  * objects and synchronization. Clients and connections are tracked
+  * using immutable Maps. The connection map is extended with my
+  * ImmutableMultiMapExtension to provide an immutable 1-many mapping
+  * of connections to clients.
+  */
 class SyncRouter extends Router {
   private var clients = Map.empty[ClientId, Client]
   private var connections = Map.empty[Connection, Set[Client]]

@@ -2,19 +2,14 @@ package stmdemo
 
 import scala.concurrent.stm._
 
+/** An implementation of the Router trait using TMap. Clients and
+  * connections are tracked using mutable TMaps. The connection map
+  * is extended with my ImmutableMultiMapExtension to provide an
+  * mutable, transactional 1-many mapping of connections to clients.
+  */
 class TMapRouter extends Router {
   private val clients = TMap[ClientId, Client]()
   private val connections = TMap[Connection, Set[Client]]()
-
-  def addBinding[A, B](m: TMap[A, Set[B]], a: A, b: B)(implicit txn: InTxn): Unit = {
-    m += ((a, m.get(a).map(s => s + b).getOrElse(Set(b))))
-  }
-
-  def removeBinding[A, B](m: TMap[A, Set[B]], a: A, b: B)(implicit txn: InTxn): Unit = {
-    val set = m.get(a) map { s => s - b } getOrElse { Set.empty[B] }
-    if (set.isEmpty) m.remove(a)
-    else m += ((a, set))
-  }
 
   def route(message: Message) = {
     getClient(message.dest) match {
@@ -27,19 +22,21 @@ class TMapRouter extends Router {
 
   def addClient(client: Client): Unit =
     atomic { implicit txn =>
-      addBinding(connections, client.connection, client)
+      connections addBinding(client.connection, client)
       clients += ((client.id, client))
     }
 
   def removeClient(client: Client): Unit =
     atomic { implicit txn =>
-      removeBinding (connections, client.connection, client)
+      connections removeBinding (client.connection, client)
       clients -= client.id
     }
 
-  def getClient(clientId: ClientId): Option[Client] = clients.single.get(clientId)
+  val clientView = clients.single
+  def getClient(clientId: ClientId): Option[Client] = clientView.get(clientId)
 
-  def getClients(connection: Connection): Set[Client] = connections.single.get(connection).getOrElse(Set.empty[Client])
+  val connectionView = connections.single
+  def getClients(connection: Connection): Set[Client] = connectionView.get(connection).getOrElse(Set.empty[Client])
 
   def removeConnection(connection: Connection): Set[Client] =
     atomic { implicit txn =>
